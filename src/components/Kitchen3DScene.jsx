@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { useThree, useLoader } from '@react-three/fiber'
-import { Grid, Environment } from '@react-three/drei'
+import { Grid } from '@react-three/drei'
 import * as THREE from 'three'
 import useKitchenStore, { COMPONENT_TYPES } from '../store/useKitchenStore'
 import KitchenItem from './KitchenItem'
@@ -32,7 +31,6 @@ function ReferenceImagePlane({ imageUrl }) {
 
 export default function Kitchen3DScene() {
   const { items, addItem, selectItem, pendingType, referenceImage } = useKitchenStore()
-  const { camera, gl } = useThree()
   const floorRef = useRef()
 
   const handleFloorClick = (e) => {

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react'
 import { useThree } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+
 import * as THREE from 'three'
 import useKitchenStore from '../store/useKitchenStore'
 
