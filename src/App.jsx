@@ -8,6 +8,8 @@ import ImageUpload from './components/ImageUpload'
 
 export default function App() {
   const { viewMode, items, selectedId } = useKitchenStore()
+  const selectedItem = items.find((i) => i.id === selectedId)
+  const wardrobeSelected = selectedItem?.type === 'drawer_wardrobe'
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: '#0f1020' }}>
@@ -52,11 +54,20 @@ export default function App() {
         </div>
 
         {/* Main view area */}
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col relative">
           {viewMode === '3d' ? (
             <Canvas3D />
           ) : (
             <FloorPlan />
+          )}
+
+          {viewMode === '3d' && wardrobeSelected && (
+            <div
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-xs text-gray-200 pointer-events-none"
+              style={{ background: 'rgba(20,22,40,0.85)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              🗃️ Click a drawer to slide it open · open the top drawer to reveal the hidden compartment
+            </div>
           )}
         </div>
       </div>

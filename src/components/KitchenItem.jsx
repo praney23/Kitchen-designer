@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useThree, useFrame } from '@react-three/fiber'
 
 import * as THREE from 'three'
 import useKitchenStore from '../store/useKitchenStore'
@@ -287,10 +287,211 @@ function TallCabinetMesh({ width, depth, height, color, selected }) {
   )
 }
 
+// A single drawer that smoothly slides open/closed along +Z (toward viewer).
+// Renders a proper open-topped box (front, back, sides, bottom) so the
+// interior reads like a real drawer when pulled out.
+function AnimatedDrawer({
+  width,
+  height,
+  depth,
+  frontColor,
+  boxColor,
+  open,
+  openDistance,
+  onToggle,
+  hidden,
+}) {
+  const groupRef = useRef()
+  const [hovered, setHovered] = useState(false)
+  const panel = 0.018 // panel thickness
+  const target = open ? openDistance : 0
+
+  useFrame(() => {
+    const g = groupRef.current
+    if (!g) return
+    // Soft-close style easing toward the target offset.
+    g.position.z += (target - g.position.z) * 0.18
+  })
+
+  const innerW = width - panel * 2
+  const innerH = height - panel
+  const handleY = hidden ? 0 : height * 0.28
+
+  return (
+    <group
+      ref={groupRef}
+      onPointerOver={(e) => {
+        e.stopPropagation()
+        setHovered(true)
+      }}
+      onPointerOut={() => setHovered(false)}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+    >
+      {/* Drawer box bottom */}
+      <mesh position={[0, -height / 2 + panel / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[innerW, panel, depth]} />
+        <meshStandardMaterial color={boxColor} roughness={0.85} metalness={0.02} />
+      </mesh>
+      {/* Left / right sides */}
+      <mesh position={[-innerW / 2 + panel / 2, 0, 0]} castShadow>
+        <boxGeometry args={[panel, innerH, depth]} />
+        <meshStandardMaterial color={boxColor} roughness={0.85} metalness={0.02} />
+      </mesh>
+      <mesh position={[innerW / 2 - panel / 2, 0, 0]} castShadow>
+        <boxGeometry args={[panel, innerH, depth]} />
+        <meshStandardMaterial color={boxColor} roughness={0.85} metalness={0.02} />
+      </mesh>
+      {/* Back wall */}
+      <mesh position={[0, 0, -depth / 2 + panel / 2]} castShadow>
+        <boxGeometry args={[innerW, innerH, panel]} />
+        <meshStandardMaterial color={boxColor} roughness={0.85} metalness={0.02} />
+      </mesh>
+      {/* Front face (the visible drawer panel) */}
+      <mesh position={[0, 0, depth / 2 - panel / 2]} castShadow receiveShadow>
+        <boxGeometry args={[width, height, panel]} />
+        <meshStandardMaterial
+          color={frontColor}
+          emissive={hovered ? '#3a7bd5' : '#000000'}
+          emissiveIntensity={hovered ? 0.25 : 0}
+          roughness={0.45}
+          metalness={0.05}
+        />
+      </mesh>
+      {/* Slim recessed handle groove */}
+      <mesh position={[0, handleY, depth / 2 + 0.002]}>
+        <boxGeometry args={[width * 0.55, 0.012, 0.006]} />
+        <meshStandardMaterial color="#2b2b2b" roughness={0.5} metalness={0.3} />
+      </mesh>
+    </group>
+  )
+}
+
+function DrawerWardrobeMesh({ item, selected }) {
+  const { width, depth, height, color } = item
+  const toggleDrawer = useKitchenStore((s) => s.toggleDrawer)
+  const selectItem = useKitchenStore((s) => s.selectItem)
+  const open = item.openDrawers || []
+  const drawerCount = 4
+
+  const emissive = selected ? '#3a7bd5' : '#000000'
+  const emissiveIntensity = selected ? 0.2 : 0
+  const shell = 0.02
+
+  // Bottom ~58% of the wardrobe holds the drawer stack; the top is an
+  // open hanging section with a rail (like the reel's wardrobe interior).
+  const drawerZoneH = height * 0.58
+  const drawerZoneBottom = -height / 2
+  const drawerH = drawerZoneH / drawerCount
+  const cavityDepth = depth - shell * 2
+  const openDist = cavityDepth * 0.82
+
+  const handleToggle = (key) => {
+    selectItem(item.id)
+    toggleDrawer(item.id, key)
+  }
+
+  const drawers = []
+  for (let i = 0; i < drawerCount; i++) {
+    const y = drawerZoneBottom + drawerH * (i + 0.5)
+    const key = `d${i}`
+    // A centered drawer of depth `cavityDepth` sits flush at the carcass
+    // front when its origin is at z = 0.
+    drawers.push(
+      <group key={key} position={[0, y, 0]}>
+        <AnimatedDrawer
+          width={width - shell * 2.4}
+          height={drawerH - 0.01}
+          depth={cavityDepth}
+          frontColor={color}
+          boxColor="#c9a878"
+          open={open.includes(key)}
+          openDistance={openDist}
+          onToggle={() => handleToggle(key)}
+        />
+      </group>
+    )
+  }
+
+  // The concealed inner drawer: a shallow drawer that lives *behind* the
+  // top drawer's front panel. It only reveals itself once you slide it out,
+  // so it stays hidden during normal use — the reel's key trick.
+  const topDrawerY = drawerZoneBottom + drawerH * (drawerCount - 1 + 0.5)
+  const hiddenH = drawerH * 0.5
+  const hiddenDepth = cavityDepth * 0.6
+  // Recess the concealed drawer's closed front ~6cm behind the carcass face
+  // so the top drawer's front panel fully hides it until pulled out.
+  const hiddenOriginZ = depth / 2 - shell - 0.06 - hiddenDepth / 2
+  const hiddenOpen = open.includes('hidden')
+
+  return (
+    <group>
+      {/* Carcass: left / right / top / bottom / back panels */}
+      <mesh position={[-width / 2 + shell / 2, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[shell, height, depth]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={emissiveIntensity} roughness={0.6} metalness={0.05} />
+      </mesh>
+      <mesh position={[width / 2 - shell / 2, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[shell, height, depth]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={emissiveIntensity} roughness={0.6} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, height / 2 - shell / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, shell, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, -height / 2 + shell / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, shell, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.05} />
+      </mesh>
+      <mesh position={[0, 0, -depth / 2 + shell / 2]} castShadow receiveShadow>
+        <boxGeometry args={[width, height, shell]} />
+        <meshStandardMaterial color="#d8d2c8" roughness={0.85} metalness={0.02} />
+      </mesh>
+
+      {/* Divider shelf between the drawer zone and the hanging section */}
+      <mesh position={[0, drawerZoneBottom + drawerZoneH, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width - shell * 2, shell, depth - shell * 2]} />
+        <meshStandardMaterial color="#d8d2c8" roughness={0.8} metalness={0.02} />
+      </mesh>
+
+      {/* Hanging rail in the upper open section */}
+      <mesh
+        position={[0, height / 2 - height * 0.1, 0]}
+        rotation={[0, 0, Math.PI / 2]}
+      >
+        <cylinderGeometry args={[0.012, 0.012, width - shell * 3, 12]} />
+        <meshStandardMaterial color="#9a9a9a" metalness={0.8} roughness={0.25} />
+      </mesh>
+
+      {/* Drawer stack */}
+      {drawers}
+
+      {/* Hidden inner compartment drawer, tucked behind the top drawer front */}
+      <group position={[0, topDrawerY + drawerH * 0.15, hiddenOriginZ]}>
+        <AnimatedDrawer
+          width={width * 0.5}
+          height={hiddenH}
+          depth={hiddenDepth}
+          frontColor="#b98d5f"
+          boxColor="#b98d5f"
+          open={hiddenOpen}
+          openDistance={openDist + 0.1}
+          onToggle={() => handleToggle('hidden')}
+          hidden
+        />
+      </group>
+    </group>
+  )
+}
+
 const MESH_COMPONENTS = {
   base_cabinet: BaseCabinetMesh,
   wall_cabinet: WallCabinetMesh,
   tall_cabinet: TallCabinetMesh,
+  drawer_wardrobe: DrawerWardrobeMesh,
   countertop: CountertopMesh,
   sink: SinkMesh,
   stove: StoveMesh,
@@ -378,13 +579,17 @@ export default function KitchenItem({ item }) {
         if (!isDragging) gl.domElement.style.cursor = 'auto'
       }}
     >
-      <MeshComponent
-        width={item.width}
-        depth={item.depth}
-        height={item.height}
-        color={item.color}
-        selected={selected}
-      />
+      {item.type === 'drawer_wardrobe' ? (
+        <MeshComponent item={item} selected={selected} />
+      ) : (
+        <MeshComponent
+          width={item.width}
+          depth={item.depth}
+          height={item.height}
+          color={item.color}
+          selected={selected}
+        />
+      )}
       {selected && (
         <lineSegments>
           <edgesGeometry args={[new THREE.BoxGeometry(item.width + 0.05, item.height + 0.05, item.depth + 0.05)]} />

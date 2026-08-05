@@ -30,6 +30,20 @@ export const COMPONENT_TYPES = {
     icon: '🗄️',
     category: 'cabinets',
   },
+  drawer_wardrobe: {
+    label: 'Drawer Wardrobe',
+    width: 1.0,
+    depth: 0.62,
+    height: 2.1,
+    color: '#ece7df',
+    icon: '🗃️',
+    category: 'cabinets',
+    // Inspired by the "Hidden Compartment Inner Drawer" reel:
+    // a tall wardrobe with a stack of soft-close drawers plus one
+    // concealed inner drawer behind the top drawer front.
+    drawers: 4,
+    hiddenCompartment: true,
+  },
   countertop: {
     label: 'Countertop',
     width: 1.2,
@@ -118,6 +132,8 @@ const useKitchenStore = create((set, get) => ({
       width: defaults.width,
       depth: defaults.depth,
       height: defaults.height,
+      // Which drawers are slid open (by index; 'hidden' for the concealed one).
+      openDrawers: [],
     }
 
     set((state) => ({
@@ -147,6 +163,22 @@ const useKitchenStore = create((set, get) => ({
 
   selectItem: (id) => {
     set({ selectedId: id })
+  },
+
+  toggleDrawer: (id, drawerKey) => {
+    set((state) => ({
+      items: state.items.map((item) => {
+        if (item.id !== id) return item
+        const open = item.openDrawers || []
+        const isOpen = open.includes(drawerKey)
+        return {
+          ...item,
+          openDrawers: isOpen
+            ? open.filter((k) => k !== drawerKey)
+            : [...open, drawerKey],
+        }
+      }),
+    }))
   },
 
   setViewMode: (mode) => {
